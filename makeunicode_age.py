@@ -1,5 +1,5 @@
 from __future__ import annotations
-import binascii
+import base64
 import re
 import struct
 import sys
@@ -19,18 +19,22 @@ class Span:
     major: int
     minor: int
 
+def _encode(b: bytes) -> str:
+    print(b[:10])
+    zb = zlib.compress(b, 9)
+    a85 = base64.a85encode(zb, wrapcol=78).decode("ascii")
+    # Method of printing the string won't work if our luck is real bad
+    assert "'''" not in a85
+    return a85
+
 def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd_version: tuple[int, ...], outfile: Path):
     version_reverse = {v: k for k, v in version_map.items()}
 
-    span_fmt = "HB"
-    VersionSpan = struct.Struct(span_fmt)
-    buf = []
-
+    counts = []
+    versions = []
     def add_span(n, v):
-        while n > 0:
-            n1 = min(n, 65536)
-            buf.append(VersionSpan.pack(n1-1, v))
-            n -= n1
+        counts.append(n-1)
+        versions.append(v)
 
     last = 0
     for s in spans:
@@ -38,35 +42,38 @@ def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd
             add_span(s.start-last, 0)
         add_span(s.stop - s.start + 1, version_map[s.major, s.minor])
         last = s.stop + 1
-    zbuf = zlib.compress(b''.join(buf), 9)
-    b64buf = binascii.b2a_base64(zbuf, newline=False)
-    n = 64
-    b64rows = "\n".join(repr(b64buf[i:i+n]) for i in range(0, len(b64buf), n))
+
+    vbuf = _encode(bytes(versions))
+    cbuf = _encode("".join(chr(c) for c in counts).encode("utf-8"))
 
     py_src = dedent("""
     # Generated file, do not edit
     from __future__ import annotations
     import struct
     import zlib
-    import binascii
+    import base64
 
     UCD_VERSION = {ucd_version}
 
     version_map = {version_reverse!r}
-    VersionSpan = struct.Struct({span_fmt!r})
 
     def iter_spans():
         start = 0
-        for count, packed_ver in VersionSpan.iter_unpack(VERSION_SPANS):
-            stop = start + count
+        for count, packed_ver in zip(_counts, _versions):
+            stop = start + ord(count)
             if packed_ver:
                 yield (start, stop, *version_map[packed_ver])
             start = stop + 1
 
-    VERSION_SPANS = zlib.decompress(binascii.a2b_base64(
-    {b64rows}
-    ))
-    """).format(ucd_version=ucd_version, span_fmt=span_fmt, b64rows=b64rows, version_reverse=version_reverse)
+    _versions = zlib.decompress(base64.a85decode(rb'''
+    {vbuf}
+    '''))
+
+    _counts = zlib.decompress(base64.a85decode(rb'''
+    {cbuf}
+    ''')).decode("utf-8")
+
+    """).format(ucd_version=ucd_version, vbuf=vbuf, cbuf=cbuf, version_reverse=version_reverse)
 
 
     outfile.write_text(py_src)
