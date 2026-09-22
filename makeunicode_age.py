@@ -22,18 +22,21 @@ class Span:
 def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd_version: tuple[int, ...], outfile: Path):
     version_reverse = {v: k for k, v in version_map.items()}
 
-    span_fmt = "IB"
+    span_fmt = "HB"
     VersionSpan = struct.Struct(span_fmt)
     buf = []
 
     def add_span(n, v):
-        buf.append(VersionSpan.pack(n, v))
+        while n > 0:
+            n1 = min(n, 65536)
+            buf.append(VersionSpan.pack(n1-1, v))
+            n -= n1
 
     last = 0
     for s in spans:
         if s.start > last:
-            add_span(s.start-last-1, 0)
-        add_span(s.stop - s.start, version_map[s.major, s.minor])
+            add_span(s.start-last, 0)
+        add_span(s.stop - s.start + 1, version_map[s.major, s.minor])
         last = s.stop + 1
     zbuf = zlib.compress(b''.join(buf), 9)
     b64buf = binascii.b2a_base64(zbuf, newline=False)
