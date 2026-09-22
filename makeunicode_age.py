@@ -28,7 +28,9 @@ def _encode(b: bytes) -> str:
     return a85
 
 def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd_version: tuple[int, ...], outfile: Path):
-    version_reverse = {v: k for k, v in version_map.items()}
+    version_reverse = [None] * len(version_map)
+    for k, v in version_map.items():
+        version_reverse[v-1] = k
 
     counts = []
     versions = []
@@ -62,7 +64,7 @@ def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd
         for count, packed_ver in zip(_counts, _versions):
             stop = start + ord(count)
             if packed_ver:
-                yield (start, stop, *version_map[packed_ver])
+                yield (start, stop, *version_map[packed_ver-1])
             start = stop + 1
 
     _versions = zlib.decompress(base64.a85decode(rb'''
