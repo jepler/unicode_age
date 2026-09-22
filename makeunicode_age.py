@@ -24,14 +24,16 @@ def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd
 
     span_fmt = "IB"
     VersionSpan = struct.Struct(span_fmt)
-
     buf = []
+
+    def add_span(n, v):
+        buf.append(VersionSpan.pack(n, v))
 
     last = 0
     for s in spans:
         if s.start > last:
-            buf.append(VersionSpan.pack(s.start-last-1, 0))
-        buf.append(VersionSpan.pack(s.stop - s.start, version_map[s.major, s.minor]))
+            add_span(s.start-last-1, 0)
+        add_span(s.stop - s.start, version_map[s.major, s.minor])
         last = s.stop + 1
     zbuf = zlib.compress(b''.join(buf), 9)
     b64buf = binascii.b2a_base64(zbuf, newline=False)
