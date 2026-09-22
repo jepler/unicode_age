@@ -19,22 +19,27 @@ class Span:
     major: int
     minor: int
 
-def _write_spans(spans: list[Span], ucd_version: tuple[int, ...], outfile: Path):
-    span_fmt = "iibb"
+def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd_version: tuple[int, ...], outfile: Path):
+    version_reverse = {v: k for k, v in version_map.items()}
+
+    span_fmt = "IB"
     VersionSpan = struct.Struct(span_fmt)
 
-    Nbytes = len(spans) * VersionSpan.size
-    buf = bytearray(Nbytes)
+    buf = []
 
-    for n, s in enumerate(spans):
-        VersionSpan.pack_into(buf, n*VersionSpan.size, s.start, s.stop, s.major, s.minor)
-
-    zbuf = zlib.compress(buf, 9)
+    last = 0
+    for s in spans:
+        if s.start > last:
+            buf.append(VersionSpan.pack(s.start-last-1, 0))
+        buf.append(VersionSpan.pack(s.stop - s.start, version_map[s.major, s.minor]))
+        last = s.stop + 1
+    zbuf = zlib.compress(b''.join(buf), 9)
     b64buf = binascii.b2a_base64(zbuf, newline=False)
     n = 64
     b64rows = "\n".join(repr(b64buf[i:i+n]) for i in range(0, len(b64buf), n))
 
     py_src = dedent("""
+    # Generated file, do not edit
     from __future__ import annotations
     import struct
     import zlib
@@ -42,15 +47,21 @@ def _write_spans(spans: list[Span], ucd_version: tuple[int, ...], outfile: Path)
 
     UCD_VERSION = {ucd_version}
 
+    version_map = {version_reverse!r}
     VersionSpan = struct.Struct({span_fmt!r})
 
     def iter_spans():
-        yield from VersionSpan.iter_unpack(VERSION_SPANS)
+        start = 0
+        for count, packed_ver in VersionSpan.iter_unpack(VERSION_SPANS):
+            stop = start + count
+            if packed_ver:
+                yield (start, stop, *version_map[packed_ver])
+            start = stop + 1
 
     VERSION_SPANS = zlib.decompress(binascii.a2b_base64(
     {b64rows}
     ))
-    """).format(ucd_version=ucd_version, span_fmt=span_fmt, b64rows=b64rows)
+    """).format(ucd_version=ucd_version, span_fmt=span_fmt, b64rows=b64rows, version_reverse=version_reverse)
 
 
     outfile.write_text(py_src)
@@ -114,8 +125,12 @@ def main():
     UNICODE_AGE = HERE.joinpath("src", "unicode_age")
     PYTHON_OUTFILE = UNICODE_AGE.joinpath("unicode_age_db.py")
 
+    all_ages = sorted(set((s.major, s.minor) for s in spans))
+    assert len(all_ages) < 256
+    version_map = {si: i+1 for i, si in enumerate(all_ages)}
     _write_spans(
         spans,
+        version_map,
         ucd_version=ucd_version,
         outfile=PYTHON_OUTFILE,
     )
