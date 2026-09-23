@@ -20,7 +20,6 @@ class Span:
     minor: int
 
 def _encode(b: bytes) -> str:
-    print(b[:10])
     zb = zlib.compress(b, 9)
     a85 = base64.a85encode(zb, wrapcol=78).decode("ascii")
     # Very unlikely sequence (1 in 614125) must be changed to not look like an end triple quote
