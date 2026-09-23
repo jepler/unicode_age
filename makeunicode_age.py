@@ -37,7 +37,16 @@ def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd
     counts = []
     versions = []
     def add_span(n, v):
-        counts.append(n-1)
+        c = n - 1
+        # Avoid a span whose length corresponds to a UTF-16 surrogate, as these
+        # values are not permitted to be encoded in UTF-8.
+        # This will recurse at most once.
+        # The decoder need not know about this little quirk.
+        # As of the Unicode standard 18.0 there are no such spans so this is untested.
+        if 0xd800 <= c < 0xdfff:
+            add_span(0xd800, v)
+            c -= 0xd800
+        counts.append(c)
         versions.append(v)
 
     last = 0
