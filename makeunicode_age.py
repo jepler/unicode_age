@@ -89,7 +89,7 @@ def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd
 
 
     outfile.write_text(py_src)
-    print(f"Wrote to {outfile}")
+    print(f"Wrote {outfile.stat().st_size} bytes to {outfile}")
 
 
 def _merge_spans(spans: typing.Iterator[Span]) -> typing.Generator[Span]:
