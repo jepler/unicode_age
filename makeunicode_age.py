@@ -97,6 +97,7 @@ def _merge_spans(spans: typing.Iterator[Span]) -> typing.Generator[Span]:
     last = next(spans) 
     merged = 0
     for span in spans:
+        assert span.start > last.stop
         if span.major == last.major and span.minor == last.minor and span.start == last.stop + 1:
             last.stop = span.stop
             merged = merged + 1
