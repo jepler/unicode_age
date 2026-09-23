@@ -1,7 +1,6 @@
 from __future__ import annotations
 import base64
 import re
-import struct
 import sys
 import typing
 import zlib
@@ -58,10 +57,8 @@ def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd
     vbuf = _encode(bytes(versions))
     cbuf = _encode("".join(chr(c) for c in counts).encode("utf-8"))
 
-    py_src = dedent("""
+    py_src = dedent("""\
     # Generated file, do not edit
-    from __future__ import annotations
-    import struct
     import zlib
     import base64
 
@@ -82,7 +79,7 @@ def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd
     '''))
 
     _counts = zlib.decompress(base64.a85decode(rb'''
-    {cbuf}
+    {cbuf}\
     ''')).decode("utf-8")
 
     """).format(ucd_version=ucd_version, vbuf=vbuf, cbuf=cbuf, version_reverse=version_reverse)
