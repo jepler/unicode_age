@@ -23,8 +23,10 @@ def _encode(b: bytes) -> str:
     print(b[:10])
     zb = zlib.compress(b, 9)
     a85 = base64.a85encode(zb, wrapcol=78).decode("ascii")
-    # Method of printing the string won't work if our luck is real bad
-    assert "'''" not in a85
+    # Very unlikely sequence (1 in 614125) must be changed to not look like an end triple quote
+    # in a way that is still a85-decodable
+    while "'''" in a85:
+        a85 = a85.replace("'''", "' ''")
     return a85
 
 def _write_spans(spans: list[Span], version_map: dict[tuple[int, int], int], ucd_version: tuple[int, ...], outfile: Path):
